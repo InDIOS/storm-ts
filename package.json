@@ -1,0 +1,27 @@
+{
+  "name": "ts-orm",
+  "version": "0.0.1",
+  "description": "A Typescript ORM based on CaminteJS using Decorators and Promises.",
+  "main": "dist/core.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "InDIOS",
+  "license": "MIT",
+  "dependencies": {
+    "sql": "^0.74.0"
+  },
+  "devDependencies": {
+    "@types/mongodb": "*",
+    "@types/mssql": "*",
+    "@types/mysql": "*",
+    "@types/node": "*",
+    "@types/oracledb": "*",
+    "@types/pg": "*",
+    "@types/pg-promise": "*",
+    "@types/rethinkdb": "*",
+    "@types/sql.js": "*",
+    "typescript": "^2.3.4"
+  }
+}

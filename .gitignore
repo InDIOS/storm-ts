@@ -1,0 +1,6 @@
+dist
+node_modules
+.eslintrc.json
+sample.js
+src/testModel.ts
+npm-debug.log

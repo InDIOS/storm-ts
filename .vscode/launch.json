@@ -1,0 +1,27 @@
+{
+	// Use IntelliSense to find out which attributes exist for node debugging
+	// Use hover for the description of the existing attributes
+	// For further information visit https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug",
+			"type": "node",
+			"request": "launch",
+			// "program": "${workspaceRoot}/sample.js",
+			"program": "${workspaceRoot}/src/testModel.ts",
+			"cwd": "${workspaceRoot}",
+			"outFiles": ["${workspaceRoot}/libs/**/*.js"],
+			// "sourceMaps": false
+			"sourceMaps": true
+		},
+		{
+			"name": "Attach",
+			"type": "node",
+			"request": "attach",
+			"port": 9229,
+			"outFiles": [],
+			"sourceMaps": true
+		}
+	]
+}

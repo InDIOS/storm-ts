@@ -1,0 +1,8 @@
+.eslintrc.json
+tsconfig.json
+tslint.json
+sample.js
+**/*.map
+.vscode
+types
+src
