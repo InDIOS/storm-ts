@@ -2,10 +2,7 @@
   "name": "storm-ts",
   "version": "0.0.1",
   "description": "A Typescript ORM based on CaminteJS using Decorators and Promises.",
-  "main": "dist/core.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "main": "./core.js",
   "keywords": [],
   "author": "InDIOS",
   "license": "MIT",
