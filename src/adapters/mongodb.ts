@@ -6,71 +6,79 @@ import {
 } from '../types';
 import { MongoClient, ObjectID, Db, Collection } from 'mongodb';
 
+const deleteKeys = ['database', 'port', 'driver', 'host', 'username', 'password', 'url'];
+
 class MongoDB extends Adapter {
 
 	client: Db;
+	settings: { [x: string]: any };
+	urlConnection: string;
 	readonly name: string;
 	private _models: { [key: string]: AdapterDefinition };
 
-  constructor(settings: ConnectionOptions) {
-    super();
+	constructor(settings: ConnectionOptions) {
+		super();
 		this._models = {};
 		this.name = 'mongodb';
 		let auth = settings.username && settings.password ? `${settings.username}:${settings.password}@` : '';
-		let url = settings.url || `mongodb://${auth}${settings.host}:${settings.port}/${settings.database}`;
-		MongoClient.connect(url, settings, (err, db) => {
-			if (err) {
-				console.log(err);
-				throw err;
-			} else {
-				this.client = db;
-			}
-		});
+		this.urlConnection = settings.url || `mongodb://${auth}${settings.host}:${settings.port}/${settings.database}`;
+		deleteKeys.forEach(key => delete settings[key]);
+		this.settings = settings;
+	}
+
+	async connect() {
+		let db = await MongoClient.connect(this.urlConnection, this.settings);
+		return db;
 	}
 
 	async collection(modelName: string) {
-		if (!this.client) {
-			throw new Error(`Can't establish a connection with the server.`);
+		try {
+			if (!this.client) {
+				this.client = await this.connect();
+			}
+		} catch (error) {
+			let err = new Error(`Can't establish a connection with the server.`);
+			err.stack = error.stack;
+			return Promise.reject(err);
 		}
-		if (this.client.collection) {
-			return await new Promise<Collection>((resolve, reject) => {
-				this.client.collection(modelName, (err, collection) => {
-					if (err) {
-						reject(err);
-					} else {
-						resolve(collection);
-					}
-				});
+		return new Promise<Collection>((resolve, reject) => {
+			this.client.collection(modelName, { strict: true }, (err, collection) => {
+				if (err) {
+					resolve(this.client.createCollection(modelName));
+				} else {
+					resolve(collection);
+				}
 			});
-		} else {
-			let collection = await this.client.createCollection(modelName);
-			return collection;
-		}
+		});
 	}
 
 	define(definition: AdapterDefinition) {
 		let modelName = definition.model.modelName;
 		this._models[modelName] = definition;
-		this.collection(modelName).then(({ createIndexes }) => {
+		this.collection(modelName).then(collection => {
 			let indexes: { key: Object, name: string, unique?: boolean, background: boolean }[] = [];
 			eachKey(definition.properties, prop => {
 				let property = definition.properties[prop];
-				let index = indexes.findIndex(i => i.name === property.index);
-				if (~index) {
-					indexes[index].key[prop] = 1;
-					indexes[index].unique = typeof property.unique === 'boolean' ? property.unique : false;
-				} else {
-					let newIndex = {
-						key: { [prop]: 1 },
-						unique: typeof property.unique === 'boolean' ? property.unique : false,
-						name: typeof property.index === 'string' ? property.index : `index_${prop}_field`,
-						background: true
-					};
-					indexes.push(newIndex);
+				if (property.unique || property.index) {
+					let index = indexes.findIndex(i => i.name === property.index);
+					if (~index) {
+						indexes[index].key[prop] = 1;
+						indexes[index].unique = typeof property.unique === 'boolean' ? property.unique : false;
+					} else {
+						let newIndex = {
+							key: { [prop]: 1 },
+							unique: typeof property.unique === 'boolean' ? property.unique : false,
+							name: typeof property.index === 'string' ? property.index : `index_${prop}_field`,
+							background: true
+						};
+						indexes.push(newIndex);
+					}
 				}
 			});
-			createIndexes(indexes).catch(err => console.log(err));
-		});
+			if (indexes.length > 0) {
+				collection.createIndexes(indexes)/*.catch(err => console.log('Error Ocurred creating indexes', err))*/;
+			}
+		})/*.catch(err => console.log('Error Ocurred getting collection', err))*/;
 	}
 
 	defineProperty(modelName: string, field: string, params: FieldOptions): void {
@@ -80,7 +88,7 @@ class MongoDB extends Adapter {
 	ensureIndex(modelName: string, fields: string | string[], params?: string | boolean | IndexOption): Promise<void> {
 		let name = '', isUnique = false;
 		let indexes: { key: Object, name: string, unique?: boolean, background: boolean }[] = [];
-		return this.collection(modelName).then(({ createIndexes }) => {
+		return this.collection(modelName).then(coll => {
 			if (Array.isArray(fields)) {
 				setValues(fields.join('_'));
 				indexes.push({
@@ -92,8 +100,10 @@ class MongoDB extends Adapter {
 				setValues(fields);
 				indexes.push({ key: { [fields]: 1 }, unique: isUnique, name, background: true });
 			}
-			return createIndexes(indexes);
-		}).then(() => { });
+			if (indexes.length > 0) {
+				return coll.createIndexes(indexes);
+			}
+		})/*.catch(err => console.log(err))*/;
 
 		function setValues(prop: string) {
 			if (typeof params === 'string') {
@@ -111,8 +121,9 @@ class MongoDB extends Adapter {
 
 	exists(modelName: string, id: string | Object): Promise<boolean> {
 		id = getObjectId(id.toString());
-		let [{ field }] = this._models[modelName].pKeys;
-		return this.count(modelName, { where: { [field]: id } }).then(count => count !== 0);
+		let [{ pKey }] = this._models[modelName].pKeys;
+		return this.count(modelName, { where: { [pKey === 'id' ? '_id' : pKey]: id } })
+			.then(count => count !== 0)/*.catch(err => console.log(err))*/;
 	}
 
 	count(modelName: string, query: ConditionOptions): Promise<number> {
@@ -120,38 +131,40 @@ class MongoDB extends Adapter {
 		opts['skip'] = query.skip;
 		opts['limit'] = query.limit;
 		let conds = buildWhere(query.where);
-		return this.collection(modelName).then(({ count }) => count(conds, opts));
+		return this.collection(modelName)
+			.then(({ count }) => count(conds, opts))/*.catch(err => console.log(err))*/;
 	}
 
 	create<M, N>(modelName: string, data: M): Promise<N> {
-		let [{ field }] = this._models[modelName].pKeys;
-		delete data[field];
-		return this.collection(modelName).then(({ insertOne }) => {
-			return insertOne(data, { w: 1 });
+		let [{ pKey }] = this._models[modelName].pKeys;
+		delete data[pKey];
+		return this.collection(modelName).then(coll => {
+			return coll.insertOne(data, { w: 1 });
 		}).then(({ ops }) => {
 			let record = this.fromDatabase<M, N>(modelName, ops && ops[0] && ops[0]._id ? ops[0] : {});
 			return record;
-		});
+		})/*.catch(err => console.log(err))*/;
 	}
 
 	save<M, N>(modelName: string, data: M): Promise<N> {
-		let [{ field }] = this._models[modelName].pKeys;
-		let id = data[field];
-		delete data[field];
-		id = getObjectId(id);
-		return this.collection(modelName).then(({ updateOne }) => {
-			return updateOne({ [field]: id }, data, { w: 1 });
+		let [{ pKey }] = this._models[modelName].pKeys;
+		let id = data[pKey];
+		delete data[pKey];
+		id = getObjectId(id.toString());
+		return this.collection(modelName).then(coll => {
+			return coll.updateOne({ [pKey === 'id' ? '_id' : pKey]: id }, data, { w: 1 });
 		}).then(({ upsertedId: { _id } }) => {
-			return this.find<M>(modelName, { where: { [field]: _id } });
+			return this.find<M>(modelName, { where: { [pKey === 'id' ? '_id' : pKey]: _id } });
 		}).then(records => {
 			return this.fromDatabase<M, N>(modelName, records[0]);
-		});
+		})/*.catch(err => console.log(err))*/;
 	}
 
 	find<M>(modelName: string, query: ConditionOptions): Promise<M[]> {
-		return this.collection(modelName).then(({ findOne }) => {
-			let [{ field }] = this._models[modelName].pKeys;
+		return this.collection(modelName).then(coll => {
+			let [{ pKey }] = this._models[modelName].pKeys;
 			let conds = buildWhere(query.where);
+			validID(conds);
 			let fields: { [key: string]: number } = {};
 			if (query.fields) {
 				let includes: { [key: string]: number } = {};
@@ -167,77 +180,91 @@ class MongoDB extends Adapter {
 						inc++;
 					}
 				});
-				includes[field] = 1;
+				includes[pKey] = 1;
 				if (inc > exc) {
 					fields = includes;
 				} else {
 					fields = excludes;
 				}
 			}
-			let options = {};
-			delete query.where;
-			delete query.fields;
-			eachKey(query, key => { options[key] = query[key]; });
-			options['fields'] = fields;
-			return findOne<Object[]>(conds, options);
+			let cursor = coll.find<Object>();
+
+			if (query.hasOwnProperty('limit')) {
+				cursor = cursor.limit(query.limit);
+			}
+
+			if (query.hasOwnProperty('skip')) {
+				cursor = cursor.skip(query.skip);
+			}
+
+			if (query.hasOwnProperty('order')) {
+				let sort = [];
+				for (var key in query.order) {
+					sort.push([key, query.order[key]]);
+				}
+				cursor = cursor.sort(sort);
+			}
+			return cursor
+				.filter(conds)
+				.project(fields).toArray();
 		}).then(result => {
 			result = result.map(record => this.fromDatabase<Object, M>(modelName, record));
 			return result;
-		});
+		})/*.catch(err => console.log(err))*/;
 	}
 
 	update<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
-		let [{ field }] = this._models[modelName].pKeys;
-		delete data[field];
+		let [{ pKey }] = this._models[modelName].pKeys;
+		delete data[pKey];
 		let conds = buildWhere(query.where);
-		if (conds['_id']) {
-			conds['id'] = getObjectId(conds['_id'].toString());
-			delete conds['_id'];
-		}
+		validID(conds);
 		return this.find<M>(modelName, query).then(records => {
 			return this.collection(modelName)
-				.then(({ updateMany }) => {
-					return updateMany(conds, { '$set': data }, { w: 1 });
-				}).then(({result}) => {
-					if (result.ok === 1 && result.n === result.nModified) {
-						return records.map(record => record[field]);
+				.then(coll => {
+					return coll.updateMany(conds, { '$set': data }, { w: 1 });
+				}).then(({ result }) => {
+					if (result.ok === 1 && result.n > 0) {
+						return records.map(record => record[pKey]);
 					} else {
 						return [];
 					}
-				});
+				})/*.catch(err => console.log(err))*/;
 		}).then(records => {
-			return records.length ? this.find<N>(modelName, { where: { [field]: { in: records } } }) : [];
-		});
+			return records && records.length ? this.find<N>(modelName, { where: { [pKey]: { in: records } } }) : [];
+		})/*.catch(err => console.log(err))*/;
 	}
 
 	updateOrCreate<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
-		let [{ field }] = this._models[modelName].pKeys;
-		if (!data[field]) {
+		let [{ pKey }] = this._models[modelName].pKeys;
+		let _id = pKey === 'id' ? '_id' : pKey;
+		if (!data[_id]) {
 			return this.create<M, N>(modelName, data).then(record => [record]);
 		} else {
-			let id = getObjectId(data[field].toString());
-			delete data[field];
-			return this.collection(modelName).then(({ findOneAndUpdate }) => {
+			let id = getObjectId(data[_id].toString());
+			delete data[_id];
+			return this.collection(modelName).then(coll => {
 				let options = { upsert: true, returnOriginal: false };
-				return findOneAndUpdate({ [field]: id }, { $set: data }, options);
-			}).then(({ value }) => value);
+				return coll.findOneAndUpdate({ [_id]: id }, { $set: data }, options);
+			}).then(({ value }) => value)/*.catch(err => console.log(err))*/;
 		}
 	}
 
 	remove(modelName: string, query: ConditionOptions): Promise<boolean> {
 		let conds = buildWhere(query.where);
+		validID(conds);
 		return this.collection(modelName)
-			.then(({ deleteMany }) => deleteMany(conds))
-			.then(({ deletedCount }) => deletedCount !== 0);
+			.then(coll => coll.deleteMany(conds))
+			.then(({ deletedCount }) =>  deletedCount !== 0)
+			/*.catch(err => console.log(err))*/;
 	}
 
 	removeById(modelName: string, id: string | Object): Promise<boolean> {
-		let [{ field }] = this._models[modelName].pKeys;
-		return this.remove(modelName, { where: { [field]: getObjectId(id.toString()) } });
+		let [{ pKey }] = this._models[modelName].pKeys;
+		return this.remove(modelName, { where: { [pKey === 'id' ? '_id' : pKey]: getObjectId(id.toString()) } });
 	}
 
 	removeAll(modelName: string): Promise<void> {
-		this.remove(modelName, {}).catch(err => console.log(err));
+		this.remove(modelName, {})/*.catch(err => console.log(err))*/;
 		return;
 	}
 
@@ -258,7 +285,7 @@ class MongoDB extends Adapter {
 
 	protected fromDatabase<M, N>(modelName: string, data: M): N {
 		let clean = {};
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
 		let { properties } = this._models[modelName];
 		eachKey(data, key => {
 			if (properties[key]) {
@@ -273,23 +300,23 @@ class MongoDB extends Adapter {
 				}
 			}
 		});
-		clean[field] = data[field] || data['_id'];
+		clean[pKey] = data[pKey] || data['_id'];
 		return <N>clean;
-  }
-  
-  static initialize(connection: Connection, done: Function) {
-    if (!MongoClient) {
-      done();
-    } else {
-      let { settings } = connection;
-      if (!settings.url) {
-        settings.host = settings.host || 'localhost';
-        settings.port = settings.port || 27017;
-        settings.database = settings.database || 'test';
-      }
-      done(new MongoDB(settings));
-    }
-  }
+	}
+
+	static initialize(connection: Connection, done: Function) {
+		if (!MongoClient) {
+			done();
+		} else {
+			let { settings } = connection;
+			if (!settings.url) {
+				settings.host = settings.host || '127.0.0.1';
+				settings.port = settings.port || 27017;
+				settings.database = settings.database || 'test';
+			}
+			done(new MongoDB(settings));
+		}
+	}
 }
 
 export = MongoDB;
@@ -300,6 +327,13 @@ function getObjectId(id: string) {
 		objectId = new ObjectID(id);
 	}
 	return objectId;
+}
+
+function validID(conds: Object) {
+	if (conds['id']) {
+		conds['_id'] = typeof conds['id'] === 'string' ? getObjectId(conds['id']) : conds['id'];
+		delete conds['id'];
+	}
 }
 
 function buildWhere(filter: Object) {
