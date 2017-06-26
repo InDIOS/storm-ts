@@ -69,7 +69,7 @@ export class Connection extends EventEmitter {
 
 		let properties = modelSettings.fields;
 		if (!modelSettings.primaryKeys.length) {
-			modelSettings.primaryKeys.push({ field: 'id', generated: true });
+			modelSettings.primaryKeys.push({ pKey: 'id', generated: true });
 			properties['id'] = properties['id'] || { type: getIdType(this.adapter.name) };
 		}
 		this.definitions[modelName] = { properties, pKeys: modelSettings.primaryKeys };
@@ -224,6 +224,7 @@ function getAdapterName(name: string) {
 			name = 'mysql';
 			break;
 		case 'mongo':
+		case 'mongodb':
 			name = 'mongodb';
 			break;
 		case 'oracle':
