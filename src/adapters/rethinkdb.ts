@@ -117,24 +117,24 @@ class RethinkDB extends Adapter {
 	}
 
 	create<M, N>(modelName: string, data: M): Promise<N> {
-		let [{ field }] = this._models[modelName].pKeys;
-		return insert<M, N>(modelName, this.toDatabase(data, field), field)
+		let [{ pKey }] = this._models[modelName].pKeys;
+		return insert<M, N>(modelName, this.toDatabase(data, pKey), pKey)
 			.then(records => this.fromDatabase(modelName, records[0]));
 	}
 
 	save<M, N>(modelName: string, data: M): Promise<N> {
-		let [{ field }] = this._models[modelName].pKeys;
-		return this.update(modelName, { where: { [field]: data[field] } }, data)
+		let [{ pKey }] = this._models[modelName].pKeys;
+		return this.update(modelName, { where: { [pKey]: data[pKey] } }, data)
 			.then(records => records[0]);
 	}
 
 	find<N>(modelName: string, query: ConditionOptions): Promise<N[]> {
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
 		let seq = buildWhere(modelName, query.where || {});
 
 		if (query.fields) {
 			let { properties } = this._models[modelName];
-			seq = seq.withFields(...selectFields(query.fields, field, keys(properties)));
+			seq = seq.withFields(...selectFields(query.fields, pKey, keys(properties)));
 		}
 
 		if (query.order) {
@@ -142,7 +142,7 @@ class RethinkDB extends Adapter {
 				seq = ~query.order[key] ? seq.orderBy(asc(key)) : seq.orderBy(desc(key));
 			});
 		} else {
-			seq = seq.orderBy(asc(field));
+			seq = seq.orderBy(asc(pKey));
 		}
 
 		if (query.skip) {
@@ -169,9 +169,9 @@ class RethinkDB extends Adapter {
 	}
 
 	update<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
 		return buildWhere(modelName, query.where)
-			.update(this.toDatabase(data, field), { returnChanges: true }).run(this.client)
+			.update(this.toDatabase(data, pKey), { returnChanges: true }).run(this.client)
 			.then(({ changes }) => {
 				return changes.map(record => this.fromDatabase(modelName, record.new_val));
 			});
@@ -180,8 +180,8 @@ class RethinkDB extends Adapter {
 	updateOrCreate<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
 		return this.find<M>(modelName, query)
 			.then(records => {
-				let [{ field }] = this._models[modelName].pKeys;
-				return insert<M, N>(modelName, this.toDatabase(data, field), field, { conflict: 'replace' });
+				let [{ pKey }] = this._models[modelName].pKeys;
+				return insert<M, N>(modelName, this.toDatabase(data, pKey), pKey, { conflict: 'replace' });
 			});
 	}
 
@@ -192,8 +192,8 @@ class RethinkDB extends Adapter {
 	}
 
 	removeById(modelName: string, id: number | string): Promise<boolean> {
-		let [{ field }] = this._models[modelName].pKeys;
-		return this.remove(modelName, { where: { [field]: id } });
+		let [{ pKey }] = this._models[modelName].pKeys;
+		return this.remove(modelName, { where: { [pKey]: id } });
 	}
 
 	removeAll(modelName: string): Promise<void> {
@@ -218,7 +218,7 @@ class RethinkDB extends Adapter {
 
 	protected fromDatabase<M, N>(modelName: string, data: M): N {
 		let clean = {};
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
 		let { properties } = this._models[modelName];
 		eachKey(data, key => {
 			if (properties[key]) {
@@ -233,7 +233,7 @@ class RethinkDB extends Adapter {
 				}
 			}
 		});
-		clean[field] = data[field] || data['id'];
+		clean[pKey] = data[pKey] || data['id'];
 		return <N>clean;
   }
   

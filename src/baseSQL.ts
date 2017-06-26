@@ -39,7 +39,7 @@ abstract class BaseSQL extends Adapter {
 				dataType: this.dataTypes(property.type, property.precision, property.decimals),
 				notNull: !!property.nullable
 			};
-			let pkey = pKeys.find(key => key.field === prop);
+			let pkey = pKeys.find(key => key.pKey === prop);
 			if (pkey) {
 				column.dataType = this.dataTypes(getIdType(this.name));
 				column.primaryKey = true;
@@ -146,7 +146,7 @@ abstract class BaseSQL extends Adapter {
 	exists(modelName: string, id: number | string): Promise<boolean> {
 		let table = this.getTable(modelName);
 		let { text, values } = table.select('1')
-			.where(table.get(this.getPKeyName(modelName).field).equals(id)).limit(1).toQuery();
+			.where(table.get(this.getPKeyName(modelName).pKey).equals(id)).limit(1).toQuery();
 		return this.query<number>(text, values).then(rows => !!rows[0]);
 	}
 
@@ -158,41 +158,41 @@ abstract class BaseSQL extends Adapter {
 	}
 
 	create<M, N>(modelName: string, data: M): Promise<N> {
-		let { field } = this.getPKeyName(modelName);
-		let { text, values } = this.getTable(modelName).insert(this.toDatabase(data, field)).toQuery();
+		let { pKey } = this.getPKeyName(modelName);
+		let { text, values } = this.getTable(modelName).insert(this.toDatabase(data, pKey)).toQuery();
 		return this.query<N>(text, values)
 			.then(rows => {
-				let row = typeof rows[0] === 'object' ? rows[0][field] : rows[0];
-				return this.find<N>(modelName, { where: { [field]: row } });
+				let row = typeof rows[0] === 'object' ? rows[0][pKey] : rows[0];
+				return this.find<N>(modelName, { where: { [pKey]: row } });
 			}).then(rows => rows[0]);
 	}
 
 	save<M, N>(modelName: string, data: M): Promise<N> {
-		let { field } = this.getPKeyName(modelName);
+		let { pKey } = this.getPKeyName(modelName);
 		return this
-			.update<M, N>(modelName, { where: { [field]: data[field] } }, this.toDatabase(data, field))
+			.update<M, N>(modelName, { where: { [pKey]: data[pKey] } }, this.toDatabase(data, pKey))
 			.then(rows => rows[0]);
 	}
 
 	find<M>(modelName: string, query: ConditionOptions): Promise<M[]> {
 		let table = this.getTable(modelName);
 		let cols = this.getColumns(modelName);
-		let { field } = this.getPKeyName(modelName);
-		let { text, values } = parseConditions(table, cols, field, query, table.select()).toQuery();
+		let { pKey } = this.getPKeyName(modelName);
+		let { text, values } = parseConditions(table, cols, pKey, query, table.select()).toQuery();
 		return this.query<M>(text, values)
 			.then(rows => rows.map(row => this.fromDatabase(modelName, row)));
 	}
 
 	update<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
 		let table = this.getTable(modelName);
-		let { field } = this.getPKeyName(modelName);
+		let { pKey } = this.getPKeyName(modelName);
 		return this.find<M>(modelName, query).then(frows => {
 			let where = buildWhere(table, query.where);
-			let { text, values } = table.update(this.toDatabase(data, field)).where(...where).toQuery();
+			let { text, values } = table.update(this.toDatabase(data, pKey)).where(...where).toQuery();
 			return this.query<N>(text, values)
-				.then(({ length }) => length ? frows.map(row => row[field]) : []);
+				.then(({ length }) => length ? frows.map(row => row[pKey]) : []);
 		}).then(rows => {
-			return !!rows.length ? this.find<N>(modelName, { where: { [field]: { in: rows } } }) : [];
+			return !!rows.length ? this.find<N>(modelName, { where: { [pKey]: { in: rows } } }) : [];
 		});
 	}
 
@@ -210,7 +210,7 @@ abstract class BaseSQL extends Adapter {
 	}
 
 	removeById(modelName: string, id: number | string | Object): Promise<boolean> {
-		return this.remove(modelName, { where: { [this.getPKeyName(modelName).field]: id } });
+		return this.remove(modelName, { where: { [this.getPKeyName(modelName).pKey]: id } });
 	}
 
 	removeAll(modelName: string): Promise<void> {
@@ -261,7 +261,7 @@ abstract class BaseSQL extends Adapter {
 				}
 			}
 		});
-		clean[pKey.field] = data[pKey.field] || data['id'];
+		clean[pKey.pKey] = data[pKey.pKey] || data['id'];
 		return <N>clean;
 	}
 

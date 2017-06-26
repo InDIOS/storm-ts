@@ -58,26 +58,26 @@ class Memory extends Adapter {
   }
 
   create<M, N>(modelName: string, data: M): Promise<N> {
-    let [{ field }] = this._models[modelName].pKeys;
-    let id: number = data[field] || this.ids[modelName]++;
-    data[field] = id;
+    let [{ pKey }] = this._models[modelName].pKeys;
+    let id: number = data[pKey] || this.ids[modelName]++;
+    data[pKey] = id;
     this.cache[modelName][id] = data;
     return Promise.resolve(this.cache[modelName][id]);
   }
 
   save<M, N>(modelName: string, data: M): Promise<N> {
-		let [{ field }] = this._models[modelName].pKeys;
-    this.cache[modelName][data[field]] = data;
-    return Promise.resolve(this.cache[modelName][data[field]]);
+		let [{ pKey }] = this._models[modelName].pKeys;
+    this.cache[modelName][data[pKey]] = data;
+    return Promise.resolve(this.cache[modelName][data[pKey]]);
   }
 
   find<M, N>(modelName: string, query: ConditionOptions) {
     let modelCache = this.cache[modelName];
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
     let records = keys(modelCache).map(model => <N>modelCache[model]);
 
     if (query.fields) {
-      let fieldNames = selectFields(query.fields, field, keys(this._models[modelName].properties));
+      let fieldNames = selectFields(query.fields, pKey, keys(this._models[modelName].properties));
       records = records.map(record => {
         let newNode = <N>{};
         for (let key in record) {
@@ -125,12 +125,12 @@ class Memory extends Adapter {
   }
 
   remove(modelName: string, query: ConditionOptions): Promise<boolean> {
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
     return this.find(modelName, query).then((records) => {
       let count = records.length;
       if (count) {
         records.forEach(record => {
-          delete this.cache[modelName][record[field]];
+          delete this.cache[modelName][record[pKey]];
           if (--count) {
             return Promise.resolve(true);
           }
@@ -142,10 +142,10 @@ class Memory extends Adapter {
   }
 
   update<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
-		let [{ field }] = this._models[modelName].pKeys;
+		let [{ pKey }] = this._models[modelName].pKeys;
     return this.find<M, N>(modelName, query).then(records => {
       return records.map(record => {
-        this.cache[modelName][record[field]] = Object.assign(record, data);
+        this.cache[modelName][record[pKey]] = Object.assign(record, data);
         return record;
       });
     });

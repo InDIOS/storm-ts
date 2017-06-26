@@ -134,7 +134,7 @@ export function uniqueness<M, N>(model: Entity<M, N>, field: string, config?: Va
 	let cond = { where: {} };
 	cond.where[field] = model[field];
 	let promise = model.rootModel.find<M, N>(cond);
-	let [{ field: pkey }] = model.rootModel.connection.definitions[model.modelName].pKeys;
+	let [{ pKey: pkey }] = model.rootModel.connection.definitions[model.modelName].pKeys;
 	return promise.then(onSuccess);
 
 	function onSuccess(found: N[]) {
