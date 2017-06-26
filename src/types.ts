@@ -47,9 +47,9 @@ export interface AdapterDefinition {
 }
 
 export interface PrimaryKey {
-	field: string;
+	pKey: string;
 	generated?: boolean;
-};
+}
 
 export interface ConnectionOptions {
 	url?: string;
@@ -64,7 +64,7 @@ export interface ConnectionOptions {
 	[key: string]: string | number | boolean;
 }
 
-export interface ConditionOptions {
+export interface ConditionOptions extends Object {
 	skip?: number;
 	limit?: number;
 	where?: Object;
@@ -144,7 +144,7 @@ export abstract class Adapter {
 	abstract ensureIndex(modelName: string, fields: string | string[], params?: string | boolean | IndexOption): Promise<void>;
 	disconnect?(): void;
 	freezeSchema?(): void;
-	connect?(): Promise<any>;
+	connect?(...params): Promise<any>;
 }
 
 interface SQLAdapter extends Adapter {

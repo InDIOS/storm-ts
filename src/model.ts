@@ -195,7 +195,7 @@ export class Entity<M, N> {
 		let { adapter } = this.connection;
 		let create = (model: M) => adapter.create<M>(this.modelName, forDataBase<M>(this, model));
 		let { pKeys } = this.connection.definitions[this.modelName];
-		let noId = pKeys.every(key => !!data[key.field]);
+		let noId = pKeys.every(key => !!data[key.pKey]);
 		if (data instanceof this && !noId) {
 			return create(data.toObject<M>()).then(record => {
 				return <N>(<any>(new this<M, N>(record)));
@@ -203,24 +203,28 @@ export class Entity<M, N> {
 		} else {
 			let model = new this<M, N>(data);
 			return model.validate().then(isValid => {
-				return create(model.toObject<M>()).then(record => {
-					eachKey(record, prop => {
-						model['__data'][prop] = record[prop];
-						model['__dataWas'][prop] = record[prop];
+				if (!isValid) {
+					pKeys.forEach(key => { model[key.pKey] = null; });
+					return Promise.resolve(<N><any>model);
+				} else {
+					beforeHook('save', model);
+					return create(model.toObject<M>()).then(record => {
+						eachKey(record, prop => {
+							model['__data'][prop] = record[prop];
+							model['__dataWas'][prop] = record[prop];
+						});
+						return new Promise<N>((resolve, reject) => {
+							resolve(<N><any>model);
+							afterHook('save', this.prototype, model);
+							afterHook('create', this.prototype, model);
+						});
 					});
-					if (!isValid) {
-						pKeys.forEach(key => { model[key.field] = null; });
-					}
-					return new Promise<N>((resolve, reject) => {
-						resolve(<N>(<any>model));
-						afterHook('create', this.prototype, model);
-					});
-				});
+				}
 			});
 		}
 	}
 
-	static find<M, N>(): QueryBuilder<N[]>;	
+	static find<M, N>(): QueryBuilder<N[]>;
 	static find<M, N>(conditions: ConditionOptions): Promise<N[]>;
 	static find<M, N>(conditions?: ConditionOptions) {
 		if (!conditions) {
@@ -250,7 +254,7 @@ export class Entity<M, N> {
 		if (isNotConnected(this.connection, this, 'findOne', conditions)) {
 			return;
 		} else {
-			if (!conditions) {
+			if (conditions) {
 				return this.find<M, N>(conditions).then(records => records[0]);
 			} else {
 				return this.find<M, N>().limit(1);
@@ -268,16 +272,15 @@ export class Entity<M, N> {
 			let hasId = false;
 			let where: Object = { where: { id } };
 			if (typeof id === 'object') {
-				hasId = pKeys.some(key => id[key.field]);
-				where = hasId && { where: { ...id } }; 
+				hasId = pKeys.some(key => id[key.pKey]);
+				where = hasId && { where: { ...id } };
 			}
-			let find = this.find<M, N>(where);
+			let find = hasId || where['where'].id ? this.find<M, N>(where) : this.find<M, N>();
 			if (find instanceof Promise) {
-				return this.find<M, N>(where).then(records => records[0]);
+				return find.then(records => records[0]);
 			} else {
-				let find = this.find<M, N>();
-				eachKey(where['where'], id => { 
-					find.where(id, where['where'][id]);
+				eachKey(where['where'], id => {
+					(<QueryBuilder<N[]>>find).where(id, where['where'][id]);
 				});
 				return find;
 			}
@@ -341,7 +344,7 @@ export class Entity<M, N> {
 			let hasId = false;
 			let where: Object = { where: { id } };
 			if (typeof id === 'object') {
-				hasId = pKeys.some(key => id[key.field]);
+				hasId = pKeys.some(key => id[key.pKey]);
 				where = hasId && { where: { ...id } };
 			}
 			return this.remove(where);
@@ -375,7 +378,7 @@ export class Entity<M, N> {
 			} else {
 				let where = {};
 				let { pKeys } = Model.connection.definitions[this.modelName];
-				pKeys.forEach(key => { where[key.field] = this[key.field];});
+				pKeys.forEach(key => { where[key.pKey] = this[key.pKey]; });
 				return Model.update(where, forDataBase(Model, data))
 					.then(records => {
 						eachKey(data, key => {
@@ -395,7 +398,7 @@ export class Entity<M, N> {
 			return;
 		}
 		let { pKeys } = Model.connection.definitions[this.modelName];
-		if (pKeys.every(key => !!this[key.field])) {
+		if (pKeys.every(key => !!this[key.pKey])) {
 			return Model.connection.adapter
 				.save<M>(this.modelName, forDataBase<M>(Model, this.toObject<M>()))
 				.then(record => {
@@ -452,7 +455,7 @@ export class Entity<M, N> {
 	}
 
 	toJSON() {
-		return JSON.stringify(this.toObject<M>(), null, 2);
+		return this.toObject<M>();
 	}
 }
 
@@ -513,7 +516,7 @@ function validationFailed<M, N>(model: Entity<M, N>, validation: Validation) {
 	if (typeof field !== 'string' || skipValidation<M, N>(model, conf, 'if') || skipValidation<M, N>(model, conf, 'unless')) {
 		return Promise.resolve(false);
 	}
-	
+
 	let validator: Validator = validators[validationName];
 	return validator<M, N>(model, field, conf).then(kind => {
 		if (typeof kind === 'boolean' && kind) {
