@@ -5,6 +5,10 @@
   "main": "./core.js",
   "keywords": [],
   "author": "InDIOS",
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/InDIOS/storm-ts.git"
+	},
   "license": "MIT",
   "dependencies": {
     "sql": "^0.74.0"
