@@ -118,23 +118,24 @@ export class Connection extends EventEmitter {
 							conn.extendModel(model.modelName, { [fkey]: fieldOpt });
 						}
 
-						let [{ field }] = this.rootModel.connection.definitions[this.modelName].pKeys;
-						let cond = { where: { [fkey]: this[field] } };
+						let [{ pKey }] = this.rootModel.connection.definitions[this.modelName].pKeys;
+						let idObj = { [fkey]: (typeof this[pKey] === 'object' ? this[pKey].toString() : this[pKey]) };
+						let cond = { where: idObj };
 
 						let oneToManyRelation = (data) => {
 							if (data) {
-								return new model({ ...data, ...{ [fkey]: this[field] } });
+								return new model({ ...data, ...idObj });
 							} else {
-								return oneToManyRelation['find']({}).then(records => {
-									let obj = this.toObject();
-									obj[prop] = records.map(record => record.toObject());
-									return obj;
-								});
+								return oneToManyRelation['find']({});/*.then(records => {
+									// let obj = this.toObject();
+									// obj[prop] = 
+									return records.map(record => record.toObject());
+								})*/
 							}
 						};
 
 						oneToManyRelation['create'] = (data) => {
-							return model.create({ ...<Object>data, ...{ [fkey]: this[field] } });
+							return model.create({ ...<Object>data, ...idObj });
 						};
 
 						oneToManyRelation['find'] = (conditions: ConditionOptions) => {
