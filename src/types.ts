@@ -1,15 +1,15 @@
 import { Entity } from './model';
 import { Connection } from './connection';
 
-export type RawType = string | number | boolean | Raw;
+/*export type RawType = string | number | boolean | Raw;
 
 export interface Raw {
 	[key: string]: RawType | RawType[];
 }
-
+*/
 export type RelationOneToMany<M, N> = {
 	(data: M): N;
-	(): Promise<Raw>;
+	(): Promise<N[]>;
 	create(data: M): Promise<N>;
 	find(conditions: ConditionOptions): Promise<N[]>;
 	remove(conditions: ConditionOptions): Promise<boolean>;
@@ -147,13 +147,13 @@ export abstract class Adapter {
 	connect?(...params): Promise<any>;
 }
 
-interface SQLAdapter extends Adapter {
+/*interface SQLAdapter extends Adapter {
 	query<M>(statement: string): Promise<M>;
 	isActual?(): Promise<any>;
 	autoupdate?(): Promise<any>;
 	automigrate?(): Promise<any>;
 	createIndexes?(modelName: string, fields: Object): Promise<any>;
-}
+}*/
 
 export enum Hooks {
 	afterInitialize,

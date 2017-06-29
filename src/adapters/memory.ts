@@ -71,7 +71,7 @@ class Memory extends Adapter {
     return Promise.resolve(this.cache[modelName][data[pKey]]);
   }
 
-  find<M, N>(modelName: string, query: ConditionOptions) {
+  find<N>(modelName: string, query: ConditionOptions) {
     let modelCache = this.cache[modelName];
 		let [{ pKey }] = this._models[modelName].pKeys;
     let records = keys(modelCache).map(model => <N>modelCache[model]);
@@ -143,7 +143,7 @@ class Memory extends Adapter {
 
   update<M, N>(modelName: string, query: ConditionOptions, data: M): Promise<N[]> {
 		let [{ pKey }] = this._models[modelName].pKeys;
-    return this.find<M, N>(modelName, query).then(records => {
+    return this.find<N>(modelName, query).then(records => {
       return records.map(record => {
         this.cache[modelName][record[pKey]] = Object.assign(record, data);
         return record;
