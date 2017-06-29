@@ -90,10 +90,10 @@ export class Connection extends EventEmitter {
 						conn.extendModel(targetModel.modelName, { [fkey]: fieldOpt });
 					}
 
-					let [{ field }] = this.rootModel.connection.definitions[rels[i]].pKeys;
+					let [{ pKey }] = this.rootModel.connection.definitions[rels[i]].pKeys;
 					if (data) {
 						return model.create(data).then(record => {
-							this[fkey] = record[field];
+							this[fkey] = record[pKey];
 							return record;
 						});
 					} else {
