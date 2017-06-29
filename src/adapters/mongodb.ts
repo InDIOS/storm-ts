@@ -78,7 +78,7 @@ class MongoDB extends Adapter {
 			if (indexes.length > 0) {
 				collection.createIndexes(indexes)/*.catch(err => console.log('Error Ocurred creating indexes', err))*/;
 			}
-		})/*.catch(err => console.log('Error Ocurred getting collection', err))*/;
+		}).catch(err => console.log('Error Ocurred getting collection', err));
 	}
 
 	defineProperty(modelName: string, field: string, params: FieldOptions): void {
