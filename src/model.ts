@@ -10,10 +10,10 @@ import {
 	Validator, ValidationError, ConditionOptions
 } from './types';
 
-const BASE_TYPES = [
+/*const BASE_TYPES = [
 	'string', 'boolean', 'number',
 	'date', 'text', 'json', 'uuid'
-];
+];*/
 
 export function GenerateModel(target: typeof Entity, connection: Connection, options: ModelOptions) {
 	defineProp(target, '_hooks', {});
@@ -42,7 +42,9 @@ export class Entity<M, N> {
 	static connection: Connection;
 
 	constructor(data: M) {
+		beforeHook('create', this);
 		this.initialize(data);
+		afterHook('create', this);
 	}
 
 	get rootModel(): typeof Entity {
@@ -102,8 +104,8 @@ export class Entity<M, N> {
 
 			properties[property].type = properties[property].type || 'string';
 
-			let type = properties[property].type;
-			if (!~BASE_TYPES.indexOf(type)) {
+			// let type = properties[property].type;
+			/*if (!~BASE_TYPES.indexOf(type)) {
 				if (this['__data'][property] && typeof this['__data'][property] !== 'object') {
 					try {
 						this['__data'][property] = JSON.parse(this['__data'][property] + '');
@@ -111,7 +113,7 @@ export class Entity<M, N> {
 						console.log(`[Error] Property ${property} with value ${this['__data'][property]} cannot be converted to ${type}.`, err);
 					}
 				}
-			}
+			}*/
 		});
 		afterHook('initialize', this);
 	}
@@ -186,8 +188,6 @@ export class Entity<M, N> {
 	}
 
 	static create<M, N>(data: M) {
-		beforeHook('create', this.prototype);
-
 		if (isNotConnected(this.connection, this, 'create', data)) {
 			return;
 		}
@@ -215,8 +215,7 @@ export class Entity<M, N> {
 						});
 						return new Promise<N>((resolve, reject) => {
 							resolve(<N><any>model);
-							afterHook('save', this.prototype, model);
-							afterHook('create', this.prototype, model);
+							afterHook('save', model);
 						});
 					});
 				}
@@ -288,7 +287,6 @@ export class Entity<M, N> {
 	}
 
 	static update<M, N>(conditions: ConditionOptions, data: M): Promise<N[]> {
-		beforeHook('update', this.prototype);
 		if (isNotConnected(this.connection, this, 'update', conditions, data)) {
 			return;
 		}
@@ -306,7 +304,6 @@ export class Entity<M, N> {
 
 				return new Promise<N[]>((resolve, reject) => {
 					resolve(modelRecords);
-					afterHook('update', this.prototype, modelRecords);
 				});
 			});
 	}
@@ -321,17 +318,13 @@ export class Entity<M, N> {
 	}
 
 	static remove(conditions: Object) {
-		beforeHook('remove', this.prototype);
 		if (isNotConnected(this.connection, this, 'remove', conditions)) {
 			return;
 		} else {
 			return this.connection
 				.adapter.remove(this.modelName, conditions)
 				.then((removed) => {
-					return new Promise<boolean>((resolve, reject) => {
-						resolve(removed);
-						afterHook('remove', this.prototype, removed);
-					});
+					return removed;
 				});
 		}
 	}
@@ -352,39 +345,41 @@ export class Entity<M, N> {
 	}
 
 	static removeAll() {
-		beforeHook('remove', this.prototype);
 		if (isNotConnected(this.connection, this, 'removeAll')) {
 			return;
 		} else {
-			return this.connection
-				.adapter.removeAll(this.modelName)
-				.then(() => {
-					return new Promise<void>((resolve, reject) => {
-						resolve();
-						afterHook('remove', this.prototype);
-					});
-				});
+			return this.connection.adapter.removeAll(this.modelName);
 		}
 	}
 
-	updateFields(data: M) {
+	update(data: M) {
 		let Model = this.rootModel;
 		eachKey(data, key => {
 			this[key] = data[key];
 		});
 		return this.validate().then(isValid => {
 			if (!isValid) {
-				return <N>(<any>(this));
+				beforeHook('update', this);
+				return new Promise<N>((resolve, reject) => {
+					resolve(<N><any>this);
+					afterHook('update', this);
+				});
 			} else {
 				let where = {};
 				let { pKeys } = Model.connection.definitions[this.modelName];
 				pKeys.forEach(key => { where[key.pKey] = this[key.pKey]; });
+				beforeHook('update', this);
 				return Model.update(where, forDataBase(Model, data))
 					.then(records => {
 						eachKey(data, key => {
 							this['__dataWas'][key] = this['__data'][key];
 						});
-						return this.save();
+						return this.save().then(record => {
+							return new Promise<N>((resolve, reject) => {
+								resolve(record);
+								afterHook('update', record);
+							});
+						});
 					});
 			}
 		});
@@ -407,7 +402,7 @@ export class Entity<M, N> {
 							this[key] = record[key];
 						});
 						resolve(<N><any>this);
-						afterHook('save', this, this);
+						afterHook('save', this);
 					});
 				});
 		} else {
