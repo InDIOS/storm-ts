@@ -1,6 +1,6 @@
 {
   "name": "storm-ts",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Typescript ORM based on CaminteJS using Decorators and Promises.",
   "main": "./core.js",
   "keywords": [],
